@@ -1,0 +1,205 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Service stack with ECS Task Definitions and ECS Services for Web and API tiers",
+  "Parameters": {
+    "ClusterName": {
+      "Type": "String",
+      "Description": "ECS Cluster Name",
+      "Default": "MultiTier_cluster"
+    },
+    "NetworkStack": {
+      "Type": "String",
+      "Description": "Name of the network stack",
+      "Default": "NetworkStack"
+    },
+    "BaseStack": {
+      "Type": "String",
+      "Description": "Name of the base stack",
+      "Default": "BaseStack"
+    }
+  },
+  "Resources": {
+    "WebTaskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "Family": "web-task",
+        "NetworkMode": "bridge",
+        "ContainerDefinitions": [
+          {
+            "Name": "web-container",
+            "Image": "mayankpratap578/frontend:v6.0",
+            "Memory": 256,
+            "PortMappings": [
+              {
+                "ContainerPort": 80,
+                "HostPort": 80
+              }
+            ],
+            "Essential": true,
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "WebLogGroup"
+                },
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "web"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ApiTaskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "Family": "api-task",
+        "NetworkMode": "bridge",
+        "ContainerDefinitions": [
+          {
+            "Name": "api-container",
+            "Image": "mayankpratap578/backend:v7.0",
+            "Memory": 256,
+            "PortMappings": [
+              {
+                "ContainerPort": 4000,
+                "HostPort": 4000
+              }
+            ],
+            "Essential": true,
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "ApiLogGroup"
+                },
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "api"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "WebService": {
+      "Type": "AWS::ECS::Service",
+      "Properties": {
+        "Cluster": {
+          "Ref": "ClusterName"
+        },
+        "DesiredCount": 2,
+        "TaskDefinition": {
+          "Ref": "WebTaskDefinition"
+        },
+        "LoadBalancers": [
+          {
+            "TargetGroupArn": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${BaseStack}-WebTargetGroupArn"
+              }
+            },
+            "ContainerName": "web-container",
+            "ContainerPort": 80
+          }
+        ],
+        "LaunchType": "EC2"
+      }
+    },
+    "ApiService": {
+      "Type": "AWS::ECS::Service",
+      "Properties": {
+        "Cluster": {
+          "Ref": "ClusterName"
+        },
+        "DesiredCount": 2,
+        "TaskDefinition": {
+          "Ref": "ApiTaskDefinition"
+        },
+        "LoadBalancers": [
+          {
+            "TargetGroupArn": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${BaseStack}-ApiTargetGroupArn"
+              }
+            },
+            "ContainerName": "api-container",
+            "ContainerPort": 4000
+          }
+        ],
+        "LaunchType": "EC2"
+      }
+    },
+    "WebLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "/ecs/web",
+        "RetentionInDays": 30
+      }
+    },
+    "ApiLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "/ecs/api",
+        "RetentionInDays": 30
+      }
+    },
+    "EcsTaskExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ecsTaskExecutionPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "WebServiceName": {
+      "Description": "Name of the ECS Web Service",
+      "Value": {
+        "Ref": "WebService"
+      }
+    },
+    "ApiServiceName": {
+      "Description": "Name of the ECS API Service",
+      "Value": {
+        "Ref": "ApiService"
+      }
+    }
+  }
+}
+
+
+
